@@ -3,6 +3,7 @@ unit csWkhtmltopdf;
 interface
 
 uses
+  Windows,
   SysUtils,
   csAPIHeaderCore;
 
@@ -10,11 +11,27 @@ uses
 
 type
 
+  Twkhtmltopdf_PChar = PUTF8Char;
+
+  Twkhtmltopdf_String = UTF8String;
+
+  //Twkhtmltopdf_PChar = PAnsiString;
+
   Twkhtmltopdf_global_settings = Pointer;
   Twkhtmltopdf_object_settings = Pointer;
   Twkhtmltopdf_converter = Pointer;
 
-  TwkhtmltopdfProgress = reference to procedure (const AMessage: String; Percent: Integer);
+  Twkhtmltopdf_TypeCallBack = (
+    tcWarning_callback,
+    tcError_callback,
+    tcPhase_changed_callback,
+    tcProgress_changed_callback,
+    tcFinished_callback);
+
+  TwkhtmltopdfProgress = reference to procedure (
+    const AMessage: String;
+    ACallBack: Twkhtmltopdf_TypeCallBack;
+    Percent: Integer);
 
   PInteger = ^integer;
 
@@ -33,10 +50,10 @@ type
     (Awkhtmltopdf_object_settings: Twkhtmltopdf_object_settings); stdcall;
 
   Twkhtmltopdf_set_global_setting = function (Awkhtmltopdf_global_settings: Twkhtmltopdf_global_settings;
-    AName: PAnsiChar; AValue: PAnsiChar): Integer; stdcall;
+    AName: Twkhtmltopdf_PChar; AValue: Twkhtmltopdf_PChar): Integer; stdcall;
 
   Twkhtmltopdf_set_object_setting = function (ATwkhtmltopdf_object_settings: Twkhtmltopdf_object_settings;
-    AName: PAnsiChar; AValue: PAnsiChar): Integer; stdcall;
+    AName: Twkhtmltopdf_PChar; AValue: Twkhtmltopdf_PChar): Integer; stdcall;
 
   Twkhtmltopdf_create_converter = function (Awkhtmltopdf_global_settings:
     Twkhtmltopdf_global_settings): Twkhtmltopdf_converter; stdcall;
@@ -44,12 +61,12 @@ type
   Twkhtmltopdf_destroy_converter = procedure (Awkhtmltopdf_converter: Twkhtmltopdf_converter); stdcall;
 
   Twkhtmltopdf_add_object = procedure(Awkhtmltopdf_converter: Twkhtmltopdf_converter;
-    ATwkhtmltopdf_object_settings: Twkhtmltopdf_object_settings; AValue: PAnsiChar); stdcall;
+    ATwkhtmltopdf_object_settings: Twkhtmltopdf_object_settings; AValue: Twkhtmltopdf_PChar); stdcall;
 
   Twkhtmltopdf_convert = function (Awkhtmltopdf_converter: Twkhtmltopdf_converter): Integer; stdcall;
 
   Twkhtmltopdf_str_callback = procedure(const Awkhtmltopdf_converter: Twkhtmltopdf_converter;
-    AValue: PAnsiChar) cdecl;
+    AValue: Twkhtmltopdf_PChar) cdecl;
   Twkhtmltopdf_int_callback = procedure(const Awkhtmltopdf_converter: Twkhtmltopdf_converter;
     AValue: Integer) cdecl;
   Twkhtmltopdf_void_callback = procedure(const Awkhtmltopdf_converter: Twkhtmltopdf_converter); cdecl;
@@ -102,14 +119,14 @@ type
     function create_object_settings(): Twkhtmltopdf_object_settings;
     procedure destroy_object_settings(Awkhtmltopdf_object_settings: Twkhtmltopdf_object_settings);
     function set_global_setting(Awkhtmltopdf_global_settings: Twkhtmltopdf_global_settings;
-      const AName, AValue: PAnsiChar): Integer;
+      const AName, AValue: String): Integer;
     function set_object_setting(ATwkhtmltopdf_object_settings: Twkhtmltopdf_object_settings;
-      const AName, AValue: PAnsiChar): Integer;
+      const AName, AValue: String): Integer;
     function create_converter(Awkhtmltopdf_global_settings:
       Twkhtmltopdf_global_settings): Twkhtmltopdf_converter;
     procedure destroy_converter(Awkhtmltopdf_converter: Twkhtmltopdf_converter);
     procedure add_object(Awkhtmltopdf_converter: Twkhtmltopdf_converter;
-      ATwkhtmltopdf_object_settings: Twkhtmltopdf_object_settings; AValue: PAnsiChar);
+      ATwkhtmltopdf_object_settings: Twkhtmltopdf_object_settings; AValue: Twkhtmltopdf_PChar);
     function convert(Awkhtmltopdf_converter: Twkhtmltopdf_converter): Integer;
 
     procedure set_warning_callback(Awkhtmltopdf_converter: Twkhtmltopdf_converter;
@@ -134,10 +151,12 @@ type
       AValue: Integer); cdecl;
   end;
 
+//function S2U(const s: String): PUnicodeString;
+
 function ConvertHTMLToPDF(AInputHTML, AOutPDF: String; AProgress: TwkhtmltopdfProgress): Boolean;
 
-procedure warning_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: PAnsiChar); cdecl;
-procedure error_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: PAnsiChar); cdecl;
+procedure warning_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Twkhtmltopdf_PChar); cdecl;
+procedure error_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Twkhtmltopdf_PChar); cdecl;
 procedure phase_changed_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter); cdecl;
 procedure progress_changed_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Integer); cdecl;
 procedure finished_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Integer); cdecl;
@@ -147,34 +166,34 @@ implementation
 var
   FwkhtmltopdfProgress: TwkhtmltopdfProgress;
 
-procedure warning_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: PAnsiChar);
+procedure warning_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Twkhtmltopdf_PChar);
 begin
   if Assigned(FwkhtmltopdfProgress) then
-    FwkhtmltopdfProgress('Предупреждение: '+String(AValue), 0);
+    FwkhtmltopdfProgress('Предупреждение: '+String(AValue), tcWarning_callback, 0);
 end;
 
-procedure error_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: PAnsiChar);
+procedure error_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Twkhtmltopdf_PChar);
 begin
   if Assigned(FwkhtmltopdfProgress) then
-    FwkhtmltopdfProgress('Ошибка: '+AValue, 0);
+    FwkhtmltopdfProgress('Ошибка: '+String(AValue), tcError_callback, 0);
 end;
 
 procedure phase_changed_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter);
 begin
   if Assigned(FwkhtmltopdfProgress) then
-    FwkhtmltopdfProgress('Фаза...', 0);
+    FwkhtmltopdfProgress('Фаза...', tcPhase_changed_callback, 0);
 end;
 
 procedure progress_changed_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Integer);
 begin
   if Assigned(FwkhtmltopdfProgress) then
-    FwkhtmltopdfProgress('Прогресс...', AValue);
+    FwkhtmltopdfProgress('Прогресс...', tcProgress_changed_callback, AValue);
 end;
 
 procedure finished_callback(const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Integer);
 begin
   if Assigned(FwkhtmltopdfProgress) then
-    FwkhtmltopdfProgress('Завершение...', AValue);
+    FwkhtmltopdfProgress('Завершение...', tcFinished_callback, AValue);
 end;
 
 function ConvertHTMLToPDF(AInputHTML, AOutPDF: String; AProgress: TwkhtmltopdfProgress): Boolean;
@@ -191,9 +210,9 @@ begin
     try
       FwkhtmltopdfProgress := AProgress;
       os := h.create_object_settings();
-      h.set_object_setting(os, 'page', PAnsiChar(PAnsiString(AnsiString(AInputHTML))));
+      h.set_object_setting(os, 'page', AInputHTML);
       gs := h.create_global_settings();
-      h.set_global_setting(gs, 'out', PAnsiChar(PAnsiString(AnsiString(AOutPDF))));
+      h.set_global_setting(gs, 'out', AOutPDF);
       c := h.create_converter(gs);
       h.add_object(c, os, nil);
       h.set_warning_callback(c, warning_callback);
@@ -218,17 +237,21 @@ end;
 procedure TcsWkhtmltopdfHeader.LoadAddress;
 begin
   inherited;
+
   @Fwkhtmltopdf_init := IntGenericGetProcAddress('wkhtmltopdf_init', 0);
   @Fwkhtmltopdf_deinit := IntGenericGetProcAddress('wkhtmltopdf_deinit', 0);
   @Fwkhtmltopdf_version := IntGenericGetProcAddress('wkhtmltopdf_version', 0);
+
   @Fwkhtmltopdf_create_global_settings := IntGenericGetProcAddress('wkhtmltopdf_create_global_settings', 0);
   @Fwkhtmltopdf_destroy_global_settings := IntGenericGetProcAddress('wkhtmltopdf_destroy_global_settings', 0);
   @Fwkhtmltopdf_create_object_settings := IntGenericGetProcAddress('wkhtmltopdf_create_object_settings', 0);
   @Fwkhtmltopdf_destroy_object_settings := IntGenericGetProcAddress('wkhtmltopdf_destroy_object_settings', 0);
   @Fwkhtmltopdf_set_global_setting := IntGenericGetProcAddress('wkhtmltopdf_set_global_setting', 0);
   @Fwkhtmltopdf_set_object_setting := IntGenericGetProcAddress('wkhtmltopdf_set_object_setting', 0);
+
   @Fwkhtmltopdf_create_converter := IntGenericGetProcAddress('wkhtmltopdf_create_converter', 0);
   @Fwkhtmltopdf_destroy_converter := IntGenericGetProcAddress('wkhtmltopdf_destroy_converter', 0);
+
   @Fwkhtmltopdf_convert := IntGenericGetProcAddress('wkhtmltopdf_convert', 0);
   @Fwkhtmltopdf_add_object := IntGenericGetProcAddress('wkhtmltopdf_add_object', 0);
 
@@ -249,28 +272,28 @@ procedure TcsWkhtmltopdfHeader.finished_callback(
   const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Integer);
 begin
   if Assigned(FProgress) then
-    FProgress('phase_changed_callback', AValue);
+    FProgress('phase_changed_callback', tcFinished_callback, AValue);
 end;
 
 procedure TcsWkhtmltopdfHeader.warning_callback(
   const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: PAnsiChar);
 begin
   if Assigned(FProgress) then
-    FProgress('phase_changed_callback: '+AValue, 0);
+    FProgress('phase_changed_callback: '+AValue, tcWarning_callback, 0);
 end;
 
 procedure TcsWkhtmltopdfHeader.phase_changed_callback(
   const Awkhtmltopdf_converter: Twkhtmltopdf_converter);
 begin
   if Assigned(FProgress) then
-    FProgress('phase_changed_callback', 0);
+    FProgress('phase_changed_callback', tcPhase_changed_callback, 0);
 end;
 
 procedure TcsWkhtmltopdfHeader.progress_changed_callback(
   const Awkhtmltopdf_converter: Twkhtmltopdf_converter; AValue: Integer);
 begin
   if Assigned(FProgress) then
-    FProgress('progress_changed_callback', AValue);
+    FProgress('progress_changed_callback', tcProgress_changed_callback, AValue);
 end;
 
 procedure TcsWkhtmltopdfHeader.SetProgress(const Value: TwkhtmltopdfProgress);
@@ -304,7 +327,7 @@ end;
 procedure TcsWkhtmltopdfHeader.add_object(
   Awkhtmltopdf_converter: Twkhtmltopdf_converter;
   ATwkhtmltopdf_object_settings: Twkhtmltopdf_object_settings;
-  AValue: PAnsiChar);
+  AValue: Twkhtmltopdf_PChar);
 begin
   Fwkhtmltopdf_add_object(Awkhtmltopdf_converter, ATwkhtmltopdf_object_settings, AValue);
 end;
@@ -347,16 +370,26 @@ end;
 
 function TcsWkhtmltopdfHeader.set_global_setting(
   Awkhtmltopdf_global_settings: Twkhtmltopdf_global_settings; const AName,
-  AValue: PAnsiChar): Integer;
+  AValue: String): Integer;
+var
+  n, v: Twkhtmltopdf_String;
 begin
-  Result := Fwkhtmltopdf_set_global_setting(Awkhtmltopdf_global_settings, AName, AValue);
-end;
+  n := AName;
+  v := UTF8Encode(AValue);
+  Result := Fwkhtmltopdf_set_global_setting(Awkhtmltopdf_global_settings,
+    Twkhtmltopdf_PChar(n), Twkhtmltopdf_PChar(v));
+    end;
 
 function TcsWkhtmltopdfHeader.set_object_setting(
   ATwkhtmltopdf_object_settings: Twkhtmltopdf_object_settings; const AName,
-  AValue: PAnsiChar): Integer;
+  AValue: String): Integer;
+var
+  n, v: Twkhtmltopdf_String;
 begin
-  Result := Fwkhtmltopdf_set_object_setting(ATwkhtmltopdf_object_settings, AName, AValue);
+  n := AName;
+  v := UTF8Encode(AValue);
+  Result := Fwkhtmltopdf_set_object_setting(ATwkhtmltopdf_object_settings,
+    Twkhtmltopdf_PChar(n), Twkhtmltopdf_PChar(v));
 end;
 
 procedure TcsWkhtmltopdfHeader.set_phase_changed_callback(
